@@ -104,6 +104,7 @@ class Light(BaseEntity):
 
     async def _handle_ha_start(self):
         await self._publish_available()
+        await self.publish_state()
 
     async def _handle_command(self, raw_message):
         try:

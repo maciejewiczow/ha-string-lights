@@ -5,7 +5,6 @@ from lib.wifiConfig import tryConnectingToKnownNetworks
 from secrets import mqtt_password, mqtt_user
 import uasyncio
 from lib.neopixel import Neopixel
-import network
 
 client = MQTTClient(
     port=1883,
@@ -26,17 +25,8 @@ device = Device(
 ha_light = Light(
     mqtt=client,
     name=b'light',
-    object_id=b'light',
     device=device,
 )
-
-lights = Neopixel(
-    num_leds=100,
-    pin=22,
-    state_machine=0,
-)
-
-wlan = network.WLAN(network.STA_IF)
 
 async def mqtt_up():
     await client.connect()
@@ -51,6 +41,12 @@ async def mqtt_messages_handler():
         await ha_light.handle_mqtt_message(topic, msg)
 
 async def lights_main():
+    lights = Neopixel(
+        num_leds=100,
+        pin=22,
+        state_machine=0,
+    )
+
     while True:
         if ha_light.is_on:
             lights.fill(ha_light.color)
@@ -59,7 +55,7 @@ async def lights_main():
             lights.fill((0,0,0))
 
         lights.show()
-        await uasyncio.sleep_ms(100)
+        await uasyncio.sleep_ms(30)
 
 async def main():
     _, ssid, password = await tryConnectingToKnownNetworks()

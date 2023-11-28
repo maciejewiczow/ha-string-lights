@@ -36,8 +36,7 @@ class Light(BaseEntity):
                 'topic': b'~/' + avail_t_suffix
             },
             'brightness': True,
-            "color_mode": True,
-            "supported_color_modes": [b"rgb", b"color_temp"]
+            'rgb': True,
         }
 
         self.effect = None
@@ -45,7 +44,6 @@ class Light(BaseEntity):
         self.is_on = True
         self.color = (255, 255, 255)
         self.brightness = 255
-        self.color_temp = 6478
 
         if len(effects) > 0:
             config['effect_list'] = effects
@@ -89,7 +87,6 @@ class Light(BaseEntity):
         state = {
             'state': b'ON' if self.is_on else b'OFF',
             'brightness': self.brightness,
-            'color_temp': self.color_temp,
             'color': {
                 'r': self.color[0],
                 'g': self.color[1],
@@ -115,7 +112,6 @@ class Light(BaseEntity):
 
         is_on = message.get('state', None)
         brightness = message.get('brightness', None)
-        color_temp = message.get('color_temp', None)
         effect = message.get('effect', None)
         color = message.get('color', None)
 
@@ -124,9 +120,6 @@ class Light(BaseEntity):
 
         if brightness:
             self.brightness = brightness
-
-        if color_temp:
-            self.color_temp = color_temp
 
         if effect is None:
             self.effect = None

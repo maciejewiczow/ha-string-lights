@@ -1,7 +1,11 @@
+from Color import Color
 from lib.ha_mqtt_device import BaseEntity, MQTTClient
+import uasyncio
 import ujson as json
 from ubinascii import hexlify
 import machine
+from uasyncio import create_task, CancelledError, sleep_ms
+import math
 
 class Light(BaseEntity):
     payload_available = b'1'
@@ -17,7 +21,9 @@ class Light(BaseEntity):
         unique_id = None,
         node_id = None,
         discovery_prefix = b'homeassistant',
-        extra_conf = None
+        extra_conf = None,
+        transition_duration_ms = 500,
+        frame_duration_ms = 30
     ):
         cmd_t_suffix = b'set'
         avail_t_suffix = b'avail'
@@ -42,8 +48,12 @@ class Light(BaseEntity):
         self.effect = None
         self.possible_effects = effects
         self.is_on = True
-        self.color = (255, 255, 255)
+        self.color = Color.rgb(1, 1, 1)
         self.brightness = 255
+        self.transition_duration_ms = transition_duration_ms
+        self.frame_duration_ms = frame_duration_ms
+        self.brightness_transition_task = None
+        self.color_transition_task = None
 
         if len(effects) > 0:
             config['effect_list'] = effects
@@ -83,15 +93,58 @@ class Light(BaseEntity):
         elif topic == b'homeassistant/status' and message == b'online':
             await self._handle_ha_start()
 
-    async def publish_state(self):
+    async def _color_transition(self, startColor, targetColor):
+        try:
+            totalFrames = math.ceil(self.transition_duration_ms/self.frame_duration_ms)
+            for frame in range(totalFrames):
+                self.color = startColor.blend(targetColor, frame/totalFrames)
+                await sleep_ms(self.frame_duration_ms)
+
+        except CancelledError:
+            pass
+
+    async def _brightness_transition(self, startBrightness, targetBrightness):
+        try:
+            totalFrames = math.ceil(self.transition_duration_ms/self.frame_duration_ms)
+            for frame in range(totalFrames):
+                frac = frame/totalFrames
+
+                self.brightness = int(startBrightness * (1 - frac) + targetBrightness * frac)
+
+                await sleep_ms(self.frame_duration_ms)
+
+        except CancelledError:
+            pass
+
+    async def start_brightness_transition(self, targetBrightness):
+        if self.brightness_transition_task:
+            self.brightness_transition_task.cancel()
+
+        self.brightness_transition_task = create_task(
+            self._brightness_transition(
+                startBrightness=self.brightness,
+                targetBrightness=targetBrightness,
+            )
+        )
+        await self.publish_state(targetBrightness, None)
+
+    async def start_color_transition(self, targetColor):
+        if self.color_transition_task:
+            self.color_transition_task.cancel()
+
+        self.color_transition_task = create_task(
+            self._color_transition(
+                startColor=self.color,
+                targetColor=targetColor,
+            )
+        )
+        await self.publish_state(None, targetColor)
+
+    async def publish_state(self, brightness = None, color = None):
         state = {
             'state': b'ON' if self.is_on else b'OFF',
-            'brightness': self.brightness,
-            'color': {
-                'r': self.color[0],
-                'g': self.color[1],
-                'b': self.color[2]
-            }
+            'brightness': brightness if brightness else self.brightness,
+            'color': dict(color if color else self.color)
         }
 
         if self.effect:
@@ -118,9 +171,6 @@ class Light(BaseEntity):
         if is_on:
             self.is_on = is_on == 'ON'
 
-        if brightness:
-            self.brightness = brightness
-
         if effect is None:
             self.effect = None
         elif effect in self.possible_effects:
@@ -128,13 +178,16 @@ class Light(BaseEntity):
         else:
             print(f'Unavailable effect recieved: {effect}')
 
-        if color:
-            try:
-                r = color['r']
-                g = color['g']
-                b = color['b']
-                self.color = (r, g, b)
-            except KeyError:
-                print('Malformed color value received')
+        bright_coro, color_coro = None, None
+        if brightness:
+            bright_coro = self.start_brightness_transition(brightness)
 
-        await self.publish_state()
+        if color:
+            color_coro = self.start_color_transition(Color().from_dict(color))
+
+        if bright_coro and color_coro:
+            await uasyncio.gather(bright_coro, color_coro)
+        elif color_coro:
+            await color_coro
+        elif bright_coro:
+            await bright_coro

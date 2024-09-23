@@ -1,5 +1,5 @@
 from Color import Color
-from lib.ha_mqtt_device import BaseEntity, MQTTClient
+from lib.ha_mqtt_device import BaseEntity, Device, MQTTClient
 import uasyncio
 import ujson as json
 from ubinascii import hexlify
@@ -8,15 +8,12 @@ from uasyncio import create_task, CancelledError, sleep_ms
 import math
 
 class Light(BaseEntity):
-    payload_available = b'1'
-    payload_unavailable = b'0'
-
     def __init__(
         self,
         mqtt: MQTTClient,
         name: bytes,
+        device: Device,
         object_id = None,
-        device = None,
         effects = [],
         unique_id = None,
         node_id = None,
@@ -26,7 +23,6 @@ class Light(BaseEntity):
         frame_duration_ms = 30
     ):
         cmd_t_suffix = b'set'
-        avail_t_suffix = b'avail'
 
         hardwareId = hexlify(machine.unique_id())
 
@@ -36,11 +32,6 @@ class Light(BaseEntity):
             'cmd_t': b'~/' + cmd_t_suffix,
             'uniq_id': unique_id if unique_id else objectid, # type: ignore
             'schema': 'json',
-            'availability': {
-                'payload_available': self.payload_available,
-                'payload_not_available': self.payload_unavailable,
-                'topic': b'~/' + avail_t_suffix
-            },
             'brightness': True,
             'rgb': True,
         }
@@ -73,25 +64,16 @@ class Light(BaseEntity):
             extra_conf=config
         )
 
-        self.avail_topic = self.base_topic + b'/' + avail_t_suffix
         self.command_topic = self.base_topic + b'/' + cmd_t_suffix
 
     async def init_mqtt(self):
         await super().init_mqtt()
-        await self._publish_available()
-        self.mqtt.set_last_will(self.avail_topic, self.payload_unavailable)
         await self.mqtt.subscribe(self.command_topic)
-        await self.mqtt.subscribe(b'homeassistant/status')
         await self.publish_state()
-
-    async def _publish_available(self):
-        await self.mqtt.publish(self.avail_topic, self.payload_available)
 
     async def handle_mqtt_message(self, topic: bytes, message):
         if topic == self.command_topic:
             await self._handle_command(message)
-        elif topic == b'homeassistant/status' and message == b'online':
-            await self._handle_ha_start()
 
     async def _color_transition(self, startColor, targetColor):
         try:
@@ -118,7 +100,7 @@ class Light(BaseEntity):
 
     async def start_brightness_transition(self, targetBrightness):
         if self.brightness_transition_task:
-            self.brightness_transition_task.cancel()
+            self.brightness_transition_task.cancel() # type: ignore
 
         self.brightness_transition_task = create_task(
             self._brightness_transition(
@@ -130,7 +112,7 @@ class Light(BaseEntity):
 
     async def start_color_transition(self, targetColor):
         if self.color_transition_task:
-            self.color_transition_task.cancel()
+            self.color_transition_task.cancel() # type: ignore
 
         self.color_transition_task = create_task(
             self._color_transition(
@@ -151,10 +133,6 @@ class Light(BaseEntity):
             state['effect'] = self.effect
 
         await super().publish_state(json.dumps(state))
-
-    async def _handle_ha_start(self):
-        await self._publish_available()
-        await self.publish_state()
 
     async def _handle_command(self, raw_message):
         try:
@@ -186,7 +164,7 @@ class Light(BaseEntity):
             color_coro = self.start_color_transition(Color().from_dict(color))
 
         if bright_coro and color_coro:
-            await uasyncio.gather(bright_coro, color_coro)
+            await uasyncio.gather(bright_coro, color_coro)  # type: ignore
         elif color_coro:
             await color_coro
         elif bright_coro:

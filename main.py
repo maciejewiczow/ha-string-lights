@@ -19,7 +19,9 @@ client = MQTTClient(
 )
 
 device = Device(
-    manufacturer=b'DYI',
+    mqtt=client,
+    device_id=b'rpi_string_lights',
+    manufacturer=b'DIY',
     model=b'Raspberry Pi PICO',
     name=b'String lights',
 )
@@ -36,7 +38,7 @@ async def mqtt_up():
     await client.connect()
     await ha_light.init_mqtt()
     while True:
-        await client.up.wait()
+        await client.up.wait() # type: ignore
         client.up.clear()
         await ha_light.init_mqtt()
 
@@ -65,6 +67,6 @@ async def main():
     _, ssid, password = await tryConnectingToKnownNetworks()
     client._ssid = ssid
     client._wifi_pw = password
-    await uasyncio.gather(mqtt_messages_handler(), mqtt_up(), lights_main())
+    await uasyncio.gather(mqtt_messages_handler(), mqtt_up(), lights_main()) # type: ignore
 
 uasyncio.run(main())

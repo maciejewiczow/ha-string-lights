@@ -17,10 +17,9 @@ class Color:
     def rgb(cls, r: float, g: float, b: float) -> 'Color':
         res = cls()
 
-        if (r,g,b) > (1,1,1):
-            r /= 255
-            g /= 255
-            b /= 255
+        r /= 255
+        g /= 255
+        b /= 255
 
         res.r, res.g, res.b = r, g, b
         return res

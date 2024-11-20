@@ -40,8 +40,10 @@ class Light(BaseEntity):
         self.effect = None
         self.possible_effects = effects
         self.is_on = True
-        self.color = Color.rgb(1, 1, 1)
+        self.color = Color.rgb(255, 255, 255)
+        self.saved_color = self.color
         self.brightness = 255
+        self.saved_brightness = self.brightness
         self.transition_duration_ms = transition_duration_ms
         self.frame_duration_ms = frame_duration_ms
         self.brightness_transition_task = None
@@ -70,7 +72,7 @@ class Light(BaseEntity):
     async def init_mqtt(self):
         await super().init_mqtt()
         await self.mqtt.subscribe(self.command_topic)
-        await self.publish_state()
+        await self.publish_state(self.brightness, self.color)
 
     async def handle_mqtt_message(self, topic: bytes, message):
         if topic == self.command_topic:
@@ -79,7 +81,7 @@ class Light(BaseEntity):
     async def _color_transition(self, start_color, target_color):
         try:
             total_frames = math.ceil(self.transition_duration_ms/self.frame_duration_ms)
-            for frame in range(total_frames):
+            for frame in range(total_frames+1):
                 self.color = start_color.blend(target_color, frame/total_frames)
                 await sleep_ms(self.frame_duration_ms)
 
@@ -88,9 +90,9 @@ class Light(BaseEntity):
 
     async def _brightness_transition(self, start_brightness, target_brightness):
         try:
-            totalFrames = math.ceil(self.transition_duration_ms/self.frame_duration_ms)
-            for frame in range(totalFrames):
-                frac = frame/totalFrames
+            total_frames = math.ceil(self.transition_duration_ms/self.frame_duration_ms)
+            for frame in range(total_frames+1):
+                frac = frame/total_frames
 
                 self.brightness = int(start_brightness * (1 - frac) + target_brightness * frac)
 
@@ -99,7 +101,7 @@ class Light(BaseEntity):
         except CancelledError:
             pass
 
-    async def start_brightness_transition(self, target_brightness):
+    async def start_brightness_transition(self, target_brightness, *, publish = True):
         if self.brightness_transition_task:
             self.brightness_transition_task.cancel() # type: ignore
 
@@ -109,9 +111,10 @@ class Light(BaseEntity):
                 target_brightness=target_brightness,
             )
         )
-        await self.publish_state(target_brightness, None)
 
-    async def start_color_transition(self, target_color):
+        await self.publish_state(target_brightness if publish else None, None)
+
+    async def start_color_transition(self, target_color, *, publish = True):
         if self.color_transition_task:
             self.color_transition_task.cancel() # type: ignore
 
@@ -121,14 +124,21 @@ class Light(BaseEntity):
                 target_color=target_color,
             )
         )
-        await self.publish_state(None, target_color)
+
+        if publish:
+            await self.publish_state(None, target_color if publish else None)
 
     async def publish_state(self, brightness = None, color = None):
         state = {
             'state': b'ON' if self.is_on else b'OFF',
-            'brightness': brightness if brightness else self.brightness,
-            'color': dict(color if color else self.color)
         }
+
+        if brightness:
+            state['brightness'] = brightness
+
+        if color:
+            state['color'] = dict(color) #type:ignore
+            state['color_mode'] = b"rgb"
 
         if self.effect:
             state['effect'] = self.effect
@@ -147,8 +157,19 @@ class Light(BaseEntity):
         effect = message.get('effect', None)
         color = message.get('color', None)
 
+        bright_coro, color_coro = None, None
+
         if is_on:
             self.is_on = is_on == 'ON'
+
+            if self.is_on:
+                color_coro = self.start_color_transition(self.saved_color, publish=False)
+                bright_coro = self.start_brightness_transition(self.saved_brightness, publish=False)
+            else:
+                self.saved_color = self.color
+                self.saved_brightness = self.brightness
+                color_coro = self.start_color_transition(Color.rgb(0,0,0), publish=False)
+                bright_coro = self.start_brightness_transition(0, publish=False)
 
         if effect is None:
             self.effect = None
@@ -157,7 +178,6 @@ class Light(BaseEntity):
         else:
             print(f'Unavailable effect recieved: {effect}')
 
-        bright_coro, color_coro = None, None
         if brightness:
             bright_coro = self.start_brightness_transition(brightness)
 

@@ -56,11 +56,7 @@ async def lights_main():
     )
 
     while True:
-        if ha_light.is_on:
-            lights.fill(ha_light.color.to_tuple())
-            lights.brightness(ha_light.brightness)
-        else:
-            lights.fill((0,0,0))
+        lights.fill(ha_light.color.to_tuple(), ha_light.brightness)
 
         lights.show()
         await uasyncio.sleep_ms(frame_duration_ms)

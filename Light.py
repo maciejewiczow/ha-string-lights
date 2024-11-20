@@ -11,6 +11,7 @@ class Light(BaseEntity):
     def __init__(
         self,
         mqtt: MQTTClient,
+        *,
         name: bytes,
         device: Device,
         object_id = None,
@@ -33,7 +34,7 @@ class Light(BaseEntity):
             'uniq_id': unique_id if unique_id else objectid, # type: ignore
             'schema': 'json',
             'brightness': True,
-            'rgb': True,
+            'supported_color_modes': ['rgb'],
         }
 
         self.effect = None
@@ -75,52 +76,52 @@ class Light(BaseEntity):
         if topic == self.command_topic:
             await self._handle_command(message)
 
-    async def _color_transition(self, startColor, targetColor):
+    async def _color_transition(self, start_color, target_color):
         try:
-            totalFrames = math.ceil(self.transition_duration_ms/self.frame_duration_ms)
-            for frame in range(totalFrames):
-                self.color = startColor.blend(targetColor, frame/totalFrames)
+            total_frames = math.ceil(self.transition_duration_ms/self.frame_duration_ms)
+            for frame in range(total_frames):
+                self.color = start_color.blend(target_color, frame/total_frames)
                 await sleep_ms(self.frame_duration_ms)
 
         except CancelledError:
             pass
 
-    async def _brightness_transition(self, startBrightness, targetBrightness):
+    async def _brightness_transition(self, start_brightness, target_brightness):
         try:
             totalFrames = math.ceil(self.transition_duration_ms/self.frame_duration_ms)
             for frame in range(totalFrames):
                 frac = frame/totalFrames
 
-                self.brightness = int(startBrightness * (1 - frac) + targetBrightness * frac)
+                self.brightness = int(start_brightness * (1 - frac) + target_brightness * frac)
 
                 await sleep_ms(self.frame_duration_ms)
 
         except CancelledError:
             pass
 
-    async def start_brightness_transition(self, targetBrightness):
+    async def start_brightness_transition(self, target_brightness):
         if self.brightness_transition_task:
             self.brightness_transition_task.cancel() # type: ignore
 
         self.brightness_transition_task = create_task(
             self._brightness_transition(
-                startBrightness=self.brightness,
-                targetBrightness=targetBrightness,
+                start_brightness=self.brightness,
+                target_brightness=target_brightness,
             )
         )
-        await self.publish_state(targetBrightness, None)
+        await self.publish_state(target_brightness, None)
 
-    async def start_color_transition(self, targetColor):
+    async def start_color_transition(self, target_color):
         if self.color_transition_task:
             self.color_transition_task.cancel() # type: ignore
 
         self.color_transition_task = create_task(
             self._color_transition(
-                startColor=self.color,
-                targetColor=targetColor,
+                start_color=self.color,
+                target_color=target_color,
             )
         )
-        await self.publish_state(None, targetColor)
+        await self.publish_state(None, target_color)
 
     async def publish_state(self, brightness = None, color = None):
         state = {
@@ -161,7 +162,7 @@ class Light(BaseEntity):
             bright_coro = self.start_brightness_transition(brightness)
 
         if color:
-            color_coro = self.start_color_transition(Color().from_dict(color))
+            color_coro = self.start_color_transition(Color.from_dict(color))
 
         if bright_coro and color_coro:
             await uasyncio.gather(bright_coro, color_coro)  # type: ignore

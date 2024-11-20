@@ -1,21 +1,21 @@
 import colorsys
 
 class Color:
-    @staticmethod
-    def hsv(h: float, s: float, v: float) -> 'Color':
-        res = Color()
+    @classmethod
+    def hsv(cls, h: float, s: float, v: float) -> 'Color':
+        res = cls()
         res.r, res.b, res.g = colorsys.hsv_to_rgb(h, s, v)
         return res
 
-    @staticmethod
-    def hls(h: float, l: float, s: float) -> 'Color':
-        res = Color()
+    @classmethod
+    def hls(cls, h: float, l: float, s: float) -> 'Color':
+        res = cls()
         res.r, res.b, res.g = colorsys.hls_to_rgb(h, l, s)
         return res
 
-    @staticmethod
-    def rgb(r: float, g: float, b: float) -> 'Color':
-        res = Color()
+    @classmethod
+    def rgb(cls, r: float, g: float, b: float) -> 'Color':
+        res = cls()
 
         if (r,g,b) > (1,1,1):
             r /= 255
@@ -35,16 +35,14 @@ class Color:
         yield 'g', self.g*255
         yield 'b', self.b*255
 
-    def from_dict(self, dict) -> 'Color':
-        self.r = dict['r']/255
-        self.g = dict['g']/255
-        self.b = dict['b']/255
-        return self
+    @classmethod
+    def from_dict(cls, dict: dict) -> 'Color':
+        return cls().rgb(dict['r'], dict['g'], dict['b'])
 
     def to_tuple(self):
         return int(self.r*255), int(self.g*255), int(self.b*255)
 
-    def toHls(self):
+    def to_hls(self):
         return colorsys.rgb_to_hls(self.r, self.g, self.b)
 
     def copy(self) -> 'Color':

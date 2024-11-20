@@ -37,10 +37,12 @@ ha_light = Light(
 async def mqtt_up():
     await client.connect()
     await ha_light.init_mqtt()
+    await device.init_mqtt()
     while True:
         await client.up.wait() # type: ignore
         client.up.clear()
         await ha_light.init_mqtt()
+        await device.init_mqtt()
 
 async def mqtt_messages_handler():
     async for topic, msg, retained in client.queue: # type: ignore

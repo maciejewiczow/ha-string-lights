@@ -1,5 +1,6 @@
 import machine
 from sdcard import SDCard
+import uos
 
 chipSelectPin = machine.Pin(17, machine.Pin.OUT)
 spi = machine.SPI(
@@ -15,3 +16,7 @@ spi = machine.SPI(
 )
 
 card = SDCard(spi, chipSelectPin)
+
+vfs = uos.VfsFat(card)
+uos.mount(vfs, "/sd")
+

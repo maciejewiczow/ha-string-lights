@@ -1,0 +1,21 @@
+{
+	"folders": [
+		{
+			"path": ".",
+			"name": "Root"
+		},
+		{
+			"path": "effects"
+		},
+		{
+			"path": "pico"
+		}
+	],
+	"settings": {
+		"python.languageServer": "Pylance",
+		"files.exclude": {
+			"effects": true,
+			"pico": true
+		}
+	}
+}

@@ -160,16 +160,21 @@ class Light(BaseEntity):
         bright_coro, color_coro = None, None
 
         if is_on:
-            self.is_on = is_on == 'ON'
+            new_state = is_on == 'ON'
 
-            if self.is_on:
-                color_coro = self.start_color_transition(self.saved_color, publish=False)
-                bright_coro = self.start_brightness_transition(self.saved_brightness, publish=False)
-            else:
-                self.saved_color = self.color
-                self.saved_brightness = self.brightness
-                color_coro = self.start_color_transition(Color.rgb(0,0,0), publish=False)
-                bright_coro = self.start_brightness_transition(0, publish=False)
+            if self.is_on != new_state:
+                if new_state:
+                    print('Starting off -> on transitions')
+                    color_coro = self.start_color_transition(self.saved_color, publish=False)
+                    bright_coro = self.start_brightness_transition(self.saved_brightness, publish=False)
+                else:
+                    print('Starting on -> off transitions')
+                    self.saved_color = self.color
+                    self.saved_brightness = self.brightness
+                    color_coro = self.start_color_transition(Color.rgb(0,0,0), publish=False)
+                    bright_coro = self.start_brightness_transition(0, publish=False)
+
+                self.is_on = new_state
 
         if effect is None:
             self.effect = None
@@ -179,9 +184,11 @@ class Light(BaseEntity):
             print(f'Unavailable effect recieved: {effect}')
 
         if brightness:
+            print('Starting brightness transition')
             bright_coro = self.start_brightness_transition(brightness)
 
         if color:
+            print('Starting color transition')
             color_coro = self.start_color_transition(Color.from_dict(color))
 
         if bright_coro and color_coro:

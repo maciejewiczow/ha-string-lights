@@ -1,5 +1,6 @@
-from os import listdir
+from Color import Color
 from Light import Light
+from effect_reader import effect_reader
 from lib.ha_mqtt_device import Device
 from lib.lib.mqtt_as import MQTTClient
 from lib.wifiConfig import tryConnectingToKnownNetworks
@@ -10,27 +11,27 @@ from lib.neopixel import Neopixel
 import machine
 import uos
 
-# chipSelectPin = machine.Pin(17, machine.Pin.OUT)
-# spi = machine.SPI(
-#     0,
-#     baudrate=1_000_000,
-#     polarity=0,
-#     phase=0,
-#     bits=8,
-#     firstbit=machine.SPI.MSB,
-#     sck=machine.Pin(18),
-#     mosi=machine.Pin(19),
-#     miso=machine.Pin(16)
-# )
+chipSelectPin = machine.Pin(17, machine.Pin.OUT)
+spi = machine.SPI(
+    0,
+    baudrate=1_000_000,
+    polarity=0,
+    phase=0,
+    bits=8,
+    firstbit=machine.SPI.MSB,
+    sck=machine.Pin(18),
+    mosi=machine.Pin(19),
+    miso=machine.Pin(16)
+)
 
-# sd = None
+sd = None
 
-# try:
-#     sd = SDCard(spi, chipSelectPin)
-#     vfs = uos.VfsFat(sd)
-#     uos.mount(vfs, "/sd")
-# except:
-#     pass
+try:
+    sd = SDCard(spi, chipSelectPin)
+    vfs = uos.VfsFat(sd)
+    uos.mount(vfs, "/sd")
+except:
+    pass
 
 frame_duration_ms = 30
 
@@ -52,11 +53,11 @@ device = Device(
     name=b'String lights',
 )
 
-# effect_filenames = []
-# try:
-#     effect_filenames = uos.listdir('/sd/effects')
-# except:
-#     pass
+effect_filenames = []
+try:
+    effect_filenames = [filename.rsplit('.') for filename in uos.listdir('/sd/effects')]
+except:
+    pass
 
 ha_light = Light(
     mqtt=client,
@@ -64,18 +65,18 @@ ha_light = Light(
     device=device,
     transition_duration_ms=500,
     frame_duration_ms=frame_duration_ms,
-    # effects=[filename.rsplit('.')[0] for filename in effect_filenames]
+    effects=[filename for (filename, extension) in effect_filenames if extension == 'effect']
 )
 
 async def mqtt_up():
     await client.connect()
-    await ha_light.init_mqtt()
     await device.init_mqtt()
+    await ha_light.init_mqtt()
     while True:
         await client.up.wait() # type: ignore
         client.up.clear()
-        await ha_light.init_mqtt()
         await device.init_mqtt()
+        await ha_light.init_mqtt()
 
 async def mqtt_messages_handler():
     async for topic, msg, retained in client.queue: # type: ignore
@@ -87,12 +88,35 @@ async def lights_main():
         pin=22,
         state_machine=0,
     )
+    reader = None
+    frames = None
 
     while True:
-        lights.fill(ha_light.color.to_tuple(), ha_light.brightness)
+        if not ha_light.effect:
+            lights.fill(ha_light.color.to_tuple(), ha_light.brightness)
+            await uasyncio.sleep_ms(frame_duration_ms)
+        else:
+            try:
+                if not reader or reader.effect_name != ha_light.effect:
+                    reader = effect_reader(
+                        effect_name=ha_light.effect,
+                        filename=f'/sd/effects/{ha_light.effect}.effect',
+                        batch_size=100
+                    )
+                    frames = reader.read_frames()
+
+                frame = next(frames) #type:ignore
+
+                for i,val in enumerate(frame):
+                    lights.set_pixel(i, Color.from_int(val).to_tuple(), ha_light.brightness)
+            except OSError:
+                ha_light.effect = None
+                await ha_light.publish_state(ha_light.brightness, ha_light.color)
+
+            await uasyncio.sleep_ms(reader.frame_delay_ms if reader else frame_duration_ms)
+
         lights.show()
 
-        await uasyncio.sleep_ms(frame_duration_ms)
 
 async def main():
     _, ssid, password = await tryConnectingToKnownNetworks()

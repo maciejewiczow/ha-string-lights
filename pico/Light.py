@@ -176,8 +176,10 @@ class Light(BaseEntity):
 
                 self.is_on = new_state
 
-        if effect is None:
+        if effect is None and brightness is None:
             self.effect = None
+        elif effect is None:
+            pass
         elif effect in self.possible_effects:
             self.effect = effect
         else:

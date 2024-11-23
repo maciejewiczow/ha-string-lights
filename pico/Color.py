@@ -14,6 +14,14 @@ class Color:
         return res
 
     @classmethod
+    def from_int(cls, arg: int):
+        r = (0xff0000 & arg) >> 16
+        g = (0x00ff00 & arg) >> 8
+        b = (0x0000ff & arg)
+
+        return cls.rgb(r, g, b)
+
+    @classmethod
     def rgb(cls, r: float, g: float, b: float) -> 'Color':
         res = cls()
 

@@ -9,6 +9,10 @@
 		},
 		{
 			"path": "pico"
+		},
+		{
+			"name": "Pico (W) Remote Workspace",
+			"uri": "pico:"
 		}
 	],
 	"settings": {
@@ -16,6 +20,8 @@
 		"files.exclude": {
 			"effects": true,
 			"pico": true
-		}
+		},
+		"micropico.syncFolder": "pico",
+    	"micropico.openOnStart": true,
 	}
 }

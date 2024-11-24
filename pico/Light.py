@@ -140,8 +140,7 @@ class Light(BaseEntity):
             state['color'] = dict(color) #type:ignore
             state['color_mode'] = b"rgb"
 
-        if self.effect:
-            state['effect'] = self.effect
+        state['effect'] = self.effect #type:ignore
 
         await super().publish_state(json.dumps(state))
 

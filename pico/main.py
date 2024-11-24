@@ -10,6 +10,8 @@ import uasyncio
 from lib.neopixel import Neopixel
 import machine
 import uos
+import time
+import gc
 
 chipSelectPin = machine.Pin(17, machine.Pin.OUT)
 spi = machine.SPI(
@@ -96,24 +98,33 @@ async def lights_main():
             lights.fill(ha_light.color.to_tuple(), ha_light.brightness)
             await uasyncio.sleep_ms(frame_duration_ms)
         else:
+            last_frame_time_ms = time.ticks_ms()
             try:
                 if not reader or reader.effect_name != ha_light.effect:
                     reader = effect_reader(
                         effect_name=ha_light.effect,
                         filename=f'/sd/effects/{ha_light.effect}.effect',
-                        batch_size=100
                     )
                     frames = reader.read_frames()
+                    gc.collect()
 
                 frame = next(frames) #type:ignore
 
-                for i,val in enumerate(frame):
-                    lights.set_pixel(i, Color.from_int(val).to_tuple(), ha_light.brightness)
-            except OSError:
+                for i, val in enumerate(frame):
+                    lights.set_pixel(i, val, ha_light.brightness)
+            except OSError as e:
+                print(e)
                 ha_light.effect = None
                 await ha_light.publish_state(ha_light.brightness, ha_light.color)
 
-            await uasyncio.sleep_ms(reader.frame_delay_ms if reader else frame_duration_ms)
+            delay = reader.frame_delay_ms if reader else frame_duration_ms
+
+            diff = time.ticks_diff(time.ticks_ms(), last_frame_time_ms)
+
+            if delay - diff > 0:
+                await uasyncio.sleep_ms(delay - diff)
+            else:
+                await uasyncio.sleep_ms(2)
 
         lights.show()
 
